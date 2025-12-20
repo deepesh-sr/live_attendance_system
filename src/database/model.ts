@@ -1,4 +1,4 @@
-import { Schema, model, connect,Types } from 'mongoose';
+import mongoose, { Schema, model, connect,Types } from 'mongoose';
 
 interface User {
    _id: Types.ObjectId,
@@ -21,7 +21,6 @@ interface Attendance{
   teacherId: Types.ObjectId, // reference to User
   studentIds: [Types.ObjectId] // array of User references
 }
-
 
 //enum for role
 
