@@ -66,7 +66,7 @@ app.post('/signup', async (req, res) => {
             const hashedPassword = await bcrypt.hash(req.body.password, 2);
 
             const newUser = new User({
-                username: username,
+                name: username,
                 email: email,
                 password: hashedPassword,
                 role: role
@@ -89,16 +89,30 @@ app.post('/signup', async (req, res) => {
     }
 })
 
-app.post('/signin', (req, res) => {
-    const { username, password } = req.body;
-    if (process.env.JWT_SECRET) {
-        const token = jwt.sign(username, process.env.JWT_SECRET)
-        res.json({
-            token: token
+app.post('/signin', async (req, res) => {
+    const { username, email } = req.body;
+    const user = await User.findOne({
+        username: username,
+        email: email
+    })
+    if (user) {
+        if (process.env.JWT_SECRET) {
+            const token = jwt.sign({
+                "userid" : user._id,
+                "role" : user.role
+            }, process.env.JWT_SECRET)
+            res.json({
+                token: token
+            })
+        } else {
+            console.error("JWT must be provided");
+        }
+    }else{
+        res.status(401).json({
+            msg: "User do not exist, please signup"
         })
-    } else {
-        console.error("JWT must be provided");
     }
+
 })
 app.listen(3000, () => {
     console.log("App is listening of port 3000")
