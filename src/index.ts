@@ -5,6 +5,8 @@ import mongoose from 'mongoose';
 import * as zod from 'zod'
 import { User } from './database/model.js';
 import bcrypt from 'bcrypt'
+import { authenticate } from './middleware/authenticate.js';
+import { ms } from 'zod/locales';
 
 dotenv.config();
 
@@ -49,14 +51,14 @@ app.get('/health', (req, res) => {
 app.post('/signup', async (req, res) => {
     try {
         const result = user.safeParse(req.body);
-        console.log("HI req.body is reached")
+
         if (result.success) {
             const { username, email, password, role } = req.body;
             const userdata = await User.findOne({
                 username: username,
                 email: email
             });
-            console.log("2")
+
             if (userdata) {
                 res.status(403).json({
                     msg: "User already exist"
@@ -114,6 +116,15 @@ app.post('/signin', async (req, res) => {
     }
 
 })
+
+app.get('/auth',authenticate,(req,res)=>{
+    res.json({
+        //@ts-ignore
+        userId : req.userid,
+        msg : "auth route accessed"
+    })
+})
+
 app.listen(3000, () => {
     console.log("App is listening of port 3000")
 })
