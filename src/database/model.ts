@@ -32,7 +32,7 @@ export enum Role{
 }
 
 const UserSchema = new Schema<User>({
-  _id: Schema.Types.ObjectId,
+  // _id: Schema.Types.ObjectId,
   name: String,
   email: String,
   password: String, // hashed with bcrypt

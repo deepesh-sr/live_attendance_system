@@ -30,8 +30,8 @@ connectDB();
 
 //zod validation 
 const user = zod.object({
-    name: zod.string,
-    email: zod.string,
+    username: zod.string(),
+    email: zod.string(),
     password: zod.string()
         .min(8)
         .max(20)
@@ -49,20 +49,21 @@ app.get('/health', (req, res) => {
 app.post('/signup', async (req, res) => {
     try {
         const result = user.safeParse(req.body);
+        console.log("HI req.body is reached")
         if (result.success) {
             const { username, email, password, role } = req.body;
             const userdata = await User.findOne({
                 username: username,
                 email: email
             });
-
+            console.log("2")
             if (userdata) {
                 res.status(403).json({
                     msg: "User already exist"
                 })
             }
 
-            const hashedPassword = bcrypt.hash(req.body.password, 2);
+            const hashedPassword = await bcrypt.hash(req.body.password, 2);
 
             const newUser = new User({
                 username: username,
@@ -81,6 +82,7 @@ app.post('/signup', async (req, res) => {
             })
         }
     } catch (error) {
+        console.error(error);
         res.status(500).json({
             msg: "server Error"
         })
