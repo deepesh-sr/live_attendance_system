@@ -92,7 +92,7 @@ app.post('/signup', async (req, res) => {
 app.post('/signin', async (req, res) => {
     const { username, email } = req.body;
     const user = await User.findOne({
-        username: username,
+        name: username,
         email: email
     })
     if (user) {
