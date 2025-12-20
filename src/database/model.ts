@@ -1,5 +1,7 @@
 import mongoose, { Schema, model, connect,Types } from 'mongoose';
 
+mongoose.Promise = global.Promise;
+
 interface User {
    _id: Types.ObjectId,
   name: String,
@@ -55,6 +57,6 @@ const AttendanceSchema = new Schema<Attendance>({
   studentIds: [Schema.Types.ObjectId] // array of User references
 })
 
-export const User = model<User>('User',UserSchema)
-export const Class = model<Class>('User',ClassSchema)
-export const Attendance = model<Attendance>('User',AttendanceSchema)
+export const User = mongoose.models.User||model<User>('User',UserSchema)
+export const Class = mongoose.models.Class||model<Class>('Class',ClassSchema)
+export const Attendance = mongoose.models.Attendance||model<Attendance>('Attendance',AttendanceSchema)

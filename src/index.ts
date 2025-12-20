@@ -81,7 +81,7 @@ app.post('/signup', async (req, res) => {
             })
         }
     } catch (error) {
-        res.json(500).json({
+        res.status(500).json({
             msg: "server Error"
         })
     }
