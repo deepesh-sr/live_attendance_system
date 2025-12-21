@@ -6,13 +6,35 @@ import * as zod from 'zod'
 import { User } from './database/model.js';
 import bcrypt from 'bcrypt'
 import { authenticate } from './middleware/authenticate.js';
-import { ms } from 'zod/locales';
+import Websocket, { WebSocketServer } from 'ws';
+import { createServer } from 'http';
 
 dotenv.config();
 
 const app = express();
+const server = createServer(app);
+
+app.use(express.static('public'));
 
 app.use(express.json());
+
+//websocket server
+
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', function connection(ws) {
+    console.log("Connection established.");
+
+    ws.on('message', function messgage(data) {
+        const messageText = data.toString();
+        console.log('Received', messageText);
+        ws.send(`Echo : ${messageText}`);
+    })
+
+    ws.on('close', function close() {
+        console.log('Client disconnected.')
+    })
+})
 
 async function connectDB() {
 
@@ -48,6 +70,58 @@ app.get('/health', (req, res) => {
     console.log("Hello");
     res.send("Helloooooo")
 })
+
+//testing ui for websocket
+app.get('/', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <title>Express WebSocket Demo</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 40px; }
+                    #messages { border: 1px solid #ccc; height: 300px; 
+                               overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
+                    #messageInput { width: 300px; padding: 5px; }
+                    button { padding: 5px 10px; }
+                </style>
+            </head>
+            <body>
+                <h1>Express WebSocket Demo</h1>
+                <div id="messages"></div>
+                <input type="text" id="messageInput" placeholder="Enter your message">
+                <button onclick="sendMessage()">Send Message</button>
+                <script>
+                    const ws = new WebSocket('ws://localhost:3000');
+                    const messages = document.getElementById('messages');
+
+                    ws.onmessage = function(event) {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.textContent = event.data;
+                        messages.appendChild(messageDiv);
+                        messages.scrollTop = messages.scrollHeight;
+                    };
+
+                    function sendMessage() {
+                        const input = document.getElementById('messageInput');
+                        if (input.value) {
+                            ws.send(input.value);
+                            input.value = '';
+                        }
+                    }
+
+                    document.getElementById('messageInput').addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            sendMessage();
+                        }
+                    });
+                </script>
+            </body>
+        </html>
+    `);
+
+});
+
 app.post('/signup', async (req, res) => {
     try {
         const result = user.safeParse(req.body);
@@ -100,8 +174,8 @@ app.post('/signin', async (req, res) => {
     if (user) {
         if (process.env.JWT_SECRET) {
             const token = jwt.sign({
-                "userid" : user._id,
-                "role" : user.role
+                "userid": user._id,
+                "role": user.role
             }, process.env.JWT_SECRET)
             res.json({
                 token: token
@@ -109,7 +183,7 @@ app.post('/signin', async (req, res) => {
         } else {
             console.error("JWT must be provided");
         }
-    }else{
+    } else {
         res.status(401).json({
             msg: "User do not exist, please signup"
         })
@@ -117,14 +191,14 @@ app.post('/signin', async (req, res) => {
 
 })
 
-app.get('/auth',authenticate,(req,res)=>{
+app.get('/auth', authenticate, (req, res) => {
     res.json({
         //@ts-ignore
-        userId : req.userid,
-        msg : "auth route accessed"
+        userId: req.userid,
+        msg: "auth route accessed"
     })
 })
 
-app.listen(3000, () => {
+server.listen(3000, () => {
     console.log("App is listening of port 3000")
 })
