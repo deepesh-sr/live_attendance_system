@@ -122,7 +122,7 @@ app.get('/', (req, res) => {
 
 });
 
-app.post('/signup', async (req, res) => {
+app.post('/auth/signup', async (req, res) => {
     try {
         const result = user.safeParse(req.body);
 
@@ -135,7 +135,7 @@ app.post('/signup', async (req, res) => {
 
             if (userdata) {
                 res.status(403).json({
-                    msg: "User already exist"
+                    msg: "Email already exist."
                 })
             }
 
@@ -165,7 +165,7 @@ app.post('/signup', async (req, res) => {
     }
 })
 
-app.post('/signin', async (req, res) => {
+app.post('/auth/login', async (req, res) => {
     const { username, email } = req.body;
     const user = await User.findOne({
         name: username,
@@ -191,10 +191,15 @@ app.post('/signin', async (req, res) => {
 
 })
 
-app.get('/auth', authenticate, (req, res) => {
+app.get('/auth/me', authenticate,async (req, res) => {
+    const user = await User.findOne({
+        // @ts-ignore
+        _id : req.userid
+    })
     res.json({
         //@ts-ignore
         userId: req.userid,
+        user : user,
         msg: "auth route accessed"
     })
 })
