@@ -27,7 +27,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         })
     }
 }
-export const authenticateUserRole = async (req: Request, res: Response, next: NextFunction) => {
+export const authenticateTeacher = async (req: Request, res: Response, next: NextFunction) => {
     try {
 
         const token = req.headers['authorization'];
@@ -43,7 +43,15 @@ export const authenticateUserRole = async (req: Request, res: Response, next: Ne
             // console.log(decodedMessage)
             //   @ts-ignore
             req.role = decodedMessage.role;
-            next();
+            //@ts-ignore
+            if ( req.role == 'teacher'){
+                next();
+            }
+            else { 
+                res.status(401).json({
+                    msg : "Authorization Error. Must be a teacher."
+                })
+            }
         }
 
     } catch (error) {
