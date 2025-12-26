@@ -73,7 +73,6 @@ const validClass = zod.object({
 })
 
 app.get('/health', (req, res) => {
-    console.log("Hello");
     res.send("Helloooooo")
 })
 
@@ -214,27 +213,22 @@ app.post('/auth/class', authenticate, async (req, res) => {
     try {
         const result = validClass.safeParse(req.body);
         const {className} = req.body;
-        console.log("1")
         if (result.success) {
 
             const user = await User.findOne({
                 // @ts-ignore
                 _id: req.userid
             })
-            console.log("1")
             if (user.role == "teacher") {
                 const already_existing_class = await Class.findOne({
                     className: className
                 })
-                
-                console.log("2")
                 if (already_existing_class) {
                     res.status(201).json({
                         msg : "Class already exists.",
                         data : already_existing_class
                     })
                 } else {
-                    console.log("creation")
                     const newClass = new Class({
                         className : className,
                         teacherId : user._id,
@@ -273,26 +267,22 @@ app.get('/auth/class', authenticate, async (req, res) => {
     try {
         const result = validClass.safeParse(req.body);
         const {className} = req.body;
-        console.log("1")
         if (result.success) {
 
             const user = await User.findOne({
                 // @ts-ignore
                 _id: req.userid
             })
-            console.log("1")
             if (user.role == "teacher") {
                 const already_existing_class = await Class.findOne({
                     className: className
                 })
                 
-                console.log("2")
                 if (already_existing_class) {
                     res.status(201).json({
                         "success": true,
                         "data": already_existing_class
                     })
-                    console.log("3")
                 } else {
                     res.status(401).json({
                         msg : "Class doesnot exist, create one."
