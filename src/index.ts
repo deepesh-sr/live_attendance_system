@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import * as zod from 'zod'
 import { Class, User } from './database/model.js';
 import bcrypt from 'bcrypt'
-import { authenticate, authenticateUserRole } from './middleware/authenticate.js';
+import { authenticate, authenticateTeacher } from './middleware/authenticate.js';
 import Websocket, { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
@@ -304,6 +304,13 @@ app.get('/auth/class', authenticate, async (req, res) => {
         })
     }
 })
+
+app.get('/auth/teacher',authenticateTeacher,async ( req,res)=>{
+    res.json({
+        msg : "welcome sir"
+    })
+})
+
 server.listen(3000, () => {
     console.log("App is listening of port 3000")
 })
