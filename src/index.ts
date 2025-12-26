@@ -3,9 +3,9 @@ import jwt from 'jsonwebtoken'
 import dotenv from 'dotenv'
 import mongoose from 'mongoose';
 import * as zod from 'zod'
-import { User } from './database/model.js';
+import { Class, User } from './database/model.js';
 import bcrypt from 'bcrypt'
-import { authenticate } from './middleware/authenticate.js';
+import { authenticate, authenticateUserRole } from './middleware/authenticate.js';
 import Websocket, { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
@@ -66,6 +66,12 @@ const user = zod.object({
     role: zod.enum(["teacher", "student"])
 
 })
+
+// class zod validation. 
+const validClass = zod.object({
+    className: zod.string()
+})
+
 app.get('/health', (req, res) => {
     console.log("Hello");
     res.send("Helloooooo")
@@ -191,19 +197,123 @@ app.post('/auth/login', async (req, res) => {
 
 })
 
-app.get('/auth/me', authenticate,async (req, res) => {
+app.get('/auth/me', authenticate, async (req, res) => {
     const user = await User.findOne({
         // @ts-ignore
-        _id : req.userid
+        _id: req.userid
     })
     res.json({
         //@ts-ignore
         userId: req.userid,
-        user : user,
+        user: user,
         msg: "auth route accessed"
     })
 })
 
+app.post('/auth/class', authenticate, async (req, res) => {
+    try {
+        const result = validClass.safeParse(req.body);
+        const {className} = req.body;
+        console.log("1")
+        if (result.success) {
+
+            const user = await User.findOne({
+                // @ts-ignore
+                _id: req.userid
+            })
+            console.log("1")
+            if (user.role == "teacher") {
+                const already_existing_class = await Class.findOne({
+                    className: className
+                })
+                
+                console.log("2")
+                if (already_existing_class) {
+                    res.status(201).json({
+                        msg : "Class already exists.",
+                        data : already_existing_class
+                    })
+                } else {
+                    console.log("creation")
+                    const newClass = new Class({
+                        className : className,
+                        teacherId : user._id,
+                        studentId : []
+                    })
+
+                    const saveResult = await newClass.save();
+
+                    if ( saveResult ) {
+                        res.status(201).json({
+                            "success" :true,
+                            "data" : newClass 
+                        })
+                    }
+                }
+
+            } else {
+                res.status(401).json({
+                    msg: "Unauthorized User. Must be a teacher."
+                })
+            }
+        }else{
+            console.error(result.error)
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(401).json({
+            msg: "Internal server error."
+        })
+    }
+})
+
+
+// get class by classid
+app.get('/auth/class', authenticate, async (req, res) => {
+    try {
+        const result = validClass.safeParse(req.body);
+        const {className} = req.body;
+        console.log("1")
+        if (result.success) {
+
+            const user = await User.findOne({
+                // @ts-ignore
+                _id: req.userid
+            })
+            console.log("1")
+            if (user.role == "teacher") {
+                const already_existing_class = await Class.findOne({
+                    className: className
+                })
+                
+                console.log("2")
+                if (already_existing_class) {
+                    res.status(201).json({
+                        "success": true,
+                        "data": already_existing_class
+                    })
+                    console.log("3")
+                } else {
+                    res.status(401).json({
+                        msg : "Class doesnot exist, create one."
+                    })
+                }
+
+            } else {
+                res.status(401).json({
+                    msg: "Unauthorized User. Must be a teacher."
+                })
+            }
+        }else{
+            console.error(result.error)
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(401).json({
+            msg: "Internal server error."
+        })
+    }
+})
 server.listen(3000, () => {
     console.log("App is listening of port 3000")
 })
