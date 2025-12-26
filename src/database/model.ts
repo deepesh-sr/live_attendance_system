@@ -44,7 +44,7 @@ const UserSchema = new Schema<User>({
 })
 
 const ClassSchema = new Schema<Class>({
-  _id: Schema.Types.ObjectId,
+  // _id: Schema.Types.ObjectId,
   className: String,
   teacherId: Schema.Types.ObjectId, // reference to User
   studentIds: [Schema.Types.ObjectId] // array of User references
