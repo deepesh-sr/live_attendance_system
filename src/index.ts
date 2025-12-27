@@ -72,6 +72,11 @@ const validClass = zod.object({
     className: zod.string()
 })
 
+// student validation
+const validStudent =zod.object({
+   studentId: zod.string()
+}) 
+
 app.get('/health', (req, res) => {
     res.send("Helloooooo")
 })
@@ -237,6 +242,8 @@ app.post('/auth/class', authenticate, async (req, res) => {
 
                     const saveResult = await newClass.save();
 
+                    //@ts-ignore
+                    req.classId = className
                     if ( saveResult ) {
                         res.status(201).json({
                             "success" :true,
@@ -311,6 +318,40 @@ app.get('/auth/teacher',authenticateTeacher,async ( req,res)=>{
     })
 })
 
+app.post('/class/:id/add-student',authenticateTeacher,async (req, res) => { 
+    
+    const result = validStudent.safeParse(req.body);
+    // const result2 = validClass.safeParse(req.params['id']);
+
+    if (result.success){
+        const id = req.params['id'];
+        const currentClass = await Class.findOne({
+            //@ts-ignore
+            className : id
+        })
+        const student = await User.findOne({
+            _id : req.body.studentId
+        })
+        if (student){
+            if (currentClass) {
+                await currentClass.studentIds.push(student._id);
+                res.status(202).json({
+                    msg : 'Student added successfully'
+                })
+            }else{
+                res.status(404).json({
+                    msg : "Class doesn't exists."
+                })
+            }
+        }else{
+            res.json({
+                msg : "student doesn't exist."
+            })
+        }
+    }else{
+        console.error(result.error)
+    }
+})
 server.listen(3000, () => {
     console.log("App is listening of port 3000")
 })
