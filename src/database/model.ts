@@ -51,8 +51,14 @@ const UserSchema = new Schema<User>({
 const ClassSchema = new Schema<Class>({
   // _id: Schema.Types.ObjectId,
   className: String,
-  teacherId: Schema.Types.ObjectId, // reference to User
-  studentIds: [Schema.Types.ObjectId] // array of User references
+  teacherId:{
+    type : Types.ObjectId,
+    ref : 'User'
+  }, // reference to User
+  studentIds:[{
+    type : Schema.Types.ObjectId,
+    ref : 'User' // array of User references
+  }]
 })
 
 const AttendanceSchema = new Schema<Attendance>({
