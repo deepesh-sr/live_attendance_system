@@ -268,7 +268,6 @@ app.post('/auth/class', authenticate, async (req, res) => {
     }
 })
 
-
 // get class by classid
 app.get('/class/:id', authenticate, async (req, res) => {
     try {
@@ -282,8 +281,8 @@ app.get('/class/:id', authenticate, async (req, res) => {
             })
 
             if (already_existing_class) {
-                
-                const studentsDetails = await Promise.all(already_existing_class.studentIds.map(async (id:string) => {
+
+                const studentsDetails = await Promise.all(already_existing_class.studentIds.map(async (id: string) => {
                     await User.findOne({
                         _id: id.toString()
                     })
@@ -364,6 +363,32 @@ app.post('/class/:id/add-student', authenticateTeacher, async (req, res) => {
         }
     } else {
         console.error(result.error)
+    }
+})
+
+app.get('/students', authenticateTeacher, async (req, res) => {
+    try {
+        const students = await User.find({
+            role: "student"
+        })
+        if (students) {
+            const studentDetails = students.map((item)=>{
+                let _id = item._id;
+                let name = item.name;
+                let email = item.email;
+                let role = item.role;
+                return {_id,name,email,role};
+            })
+            res.status(202).json({
+                success: true,
+                data: studentDetails
+            })
+        }
+    } catch (error) {
+        console.error(error)
+        res.json({
+            msg: "Internal server error."
+        })
     }
 })
 server.listen(3000, () => {
