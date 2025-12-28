@@ -1,7 +1,7 @@
 import express from 'express'
 import jwt from 'jsonwebtoken'
 import dotenv from 'dotenv'
-import mongoose from 'mongoose';
+import mongoose, { type ObjectId } from 'mongoose';
 import * as zod from 'zod'
 import { Class, User } from './database/model.js';
 import bcrypt from 'bcrypt'
@@ -73,9 +73,9 @@ const validClass = zod.object({
 })
 
 // student validation
-const validStudent =zod.object({
-   studentId: zod.string()
-}) 
+const validStudent = zod.object({
+    studentId: zod.string()
+})
 
 app.get('/health', (req, res) => {
     res.send("Helloooooo")
@@ -217,7 +217,7 @@ app.get('/auth/me', authenticate, async (req, res) => {
 app.post('/auth/class', authenticate, async (req, res) => {
     try {
         const result = validClass.safeParse(req.body);
-        const {className} = req.body;
+        const { className } = req.body;
         if (result.success) {
 
             const user = await User.findOne({
@@ -230,24 +230,24 @@ app.post('/auth/class', authenticate, async (req, res) => {
                 })
                 if (already_existing_class) {
                     res.status(201).json({
-                        msg : "Class already exists.",
-                        data : already_existing_class
+                        msg: "Class already exists.",
+                        data: already_existing_class
                     })
                 } else {
                     const newClass = new Class({
-                        className : className,
-                        teacherId : user._id,
-                        studentId : []
+                        className: className,
+                        teacherId: user._id,
+                        studentId: []
                     })
 
                     const saveResult = await newClass.save();
 
                     //@ts-ignore
                     req.classId = className
-                    if ( saveResult ) {
+                    if (saveResult) {
                         res.status(201).json({
-                            "success" :true,
-                            "data" : newClass 
+                            "success": true,
+                            "data": newClass
                         })
                     }
                 }
@@ -257,7 +257,7 @@ app.post('/auth/class', authenticate, async (req, res) => {
                     msg: "Unauthorized User. Must be a teacher."
                 })
             }
-        }else{
+        } else {
             console.error(result.error)
         }
     } catch (error) {
@@ -270,39 +270,45 @@ app.post('/auth/class', authenticate, async (req, res) => {
 
 
 // get class by classid
-app.get('/auth/class', authenticate, async (req, res) => {
+app.get('/class/:id', authenticate, async (req, res) => {
     try {
-        const result = validClass.safeParse(req.body);
-        const {className} = req.body;
-        if (result.success) {
-
-            const user = await User.findOne({
-                // @ts-ignore
-                _id: req.userid
+        const user = await User.findOne({
+            // @ts-ignore
+            _id: req.userid
+        })
+        if (user.role == "teacher") {
+            const already_existing_class = await Class.findOne({
+                className: req.params['id']
             })
-            if (user.role == "teacher") {
-                const already_existing_class = await Class.findOne({
-                    className: className
-                })
-                
-                if (already_existing_class) {
-                    res.status(201).json({
-                        "success": true,
-                        "data": already_existing_class
-                    })
-                } else {
-                    res.status(401).json({
-                        msg : "Class doesnot exist, create one."
-                    })
-                }
 
+            if (already_existing_class) {
+                
+                const studentsDetails = await Promise.all(already_existing_class.studentIds.map(async (id:string) => {
+                    await User.findOne({
+                        _id: id.toString()
+                    })
+                }))
+                console.log(studentsDetails)
+                res.status(201).json({
+                    "success": true,
+                    "data": {
+                        _id: already_existing_class._id,
+                        className: already_existing_class.className,
+                        teacherId: already_existing_class.teacherId,
+                        studentIds: already_existing_class.studentIds,
+                        students: studentsDetails
+                    }
+                })
             } else {
                 res.status(401).json({
-                    msg: "Unauthorized User. Must be a teacher."
+                    msg: "Class doesnot exist, create one."
                 })
             }
-        }else{
-            console.error(result.error)
+
+        } else {
+            res.status(401).json({
+                msg: "Unauthorized User. Must be a teacher."
+            })
         }
     } catch (error) {
         console.error(error);
@@ -312,43 +318,51 @@ app.get('/auth/class', authenticate, async (req, res) => {
     }
 })
 
-app.get('/auth/teacher',authenticateTeacher,async ( req,res)=>{
+app.get('/auth/teacher', authenticateTeacher, async (req, res) => {
     res.json({
-        msg : "welcome sir"
+        msg: "welcome sir"
     })
 })
 
-app.post('/class/:id/add-student',authenticateTeacher,async (req, res) => { 
-    
+app.post('/class/:id/add-student', authenticateTeacher, async (req, res) => {
+
     const result = validStudent.safeParse(req.body);
     // const result2 = validClass.safeParse(req.params['id']);
 
-    if (result.success){
+    if (result.success) {
         const id = req.params['id'];
         const currentClass = await Class.findOne({
             //@ts-ignore
-            className : id
+            className: id
         })
         const student = await User.findOne({
-            _id : req.body.studentId
+            _id: req.body.studentId
         })
-        if (student){
+        if (student) {
             if (currentClass) {
                 await currentClass.studentIds.push(student._id);
-                res.status(202).json({
-                    msg : 'Student added successfully'
-                })
-            }else{
+                const result = await currentClass.save();
+                if (result) {
+                    res.status(202).json({
+                        msg: 'Student added successfully',
+                        data: currentClass
+                    })
+                } else {
+                    res.status(402).json({
+                        msg: "Add student failed."
+                    })
+                }
+            } else {
                 res.status(404).json({
-                    msg : "Class doesn't exists."
+                    msg: "Class doesn't exists."
                 })
             }
-        }else{
+        } else {
             res.json({
-                msg : "student doesn't exist."
+                msg: "student doesn't exist."
             })
         }
-    }else{
+    } else {
         console.error(result.error)
     }
 })
