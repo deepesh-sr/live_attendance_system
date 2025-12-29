@@ -80,6 +80,10 @@ export const authenticateStudent = async (req: Request, res: Response, next: Nex
             req.role = decodedMessage.role;
             //@ts-ignore
             if ( req.role == 'student'){
+                //@ts-ignore
+                req.userid = decodedMessage.userid;
+                //@ts-ignore
+                // console.log(req.userid)
                 next();
             }
             else { 
