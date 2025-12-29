@@ -20,7 +20,7 @@ interface Class {
 interface Attendance {
   _id: Types.ObjectId,
   classId: Types.ObjectId,
-  teacherId: Types.ObjectId,
+  studentId: Types.ObjectId,
   status: "present" | "absent"
 }
 
@@ -56,7 +56,7 @@ const ClassSchema = new Schema<Class>({
     ref : 'User'
   }, // reference to User
   studentIds:[{
-    type : Schema.Types.ObjectId,
+    type : Types.ObjectId,
     ref : 'User' // array of User references
   }]
 })
@@ -64,7 +64,7 @@ const ClassSchema = new Schema<Class>({
 const AttendanceSchema = new Schema<Attendance>({
   _id: Types.ObjectId,
   classId: Types.ObjectId,
-  teacherId: Types.ObjectId,
+  studentId: Types.ObjectId,
   status: {
     type: String,
     enum: Object.values(Status),

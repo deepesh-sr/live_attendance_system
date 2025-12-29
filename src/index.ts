@@ -3,9 +3,9 @@ import jwt from 'jsonwebtoken'
 import dotenv from 'dotenv'
 import mongoose, { type ObjectId } from 'mongoose';
 import * as zod from 'zod'
-import { Class, User } from './database/model.js';
+import { Attendance, Class, User } from './database/model.js';
 import bcrypt from 'bcrypt'
-import { authenticate, authenticateTeacher } from './middleware/authenticate.js';
+import { authenticate, authenticateStudent, authenticateTeacher } from './middleware/authenticate.js';
 import Websocket, { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 
@@ -71,6 +71,8 @@ const user = zod.object({
 const validClass = zod.object({
     className: zod.string()
 })
+
+const validClassId = zod.string();
 
 // student validation
 const validStudent = zod.object({
@@ -278,8 +280,9 @@ app.get('/class/:id', authenticate, async (req, res) => {
         if (user.role == "teacher") {
             const already_existing_class = await Class.findOne({
                 className: req.params['id']
-            })
+            }).populate('teacherId')
 
+            console.log(already_existing_class);
             if (already_existing_class) {
 
                 const studentsDetails = await Promise.all(already_existing_class.studentIds.map(async (id: string) => {
@@ -287,7 +290,6 @@ app.get('/class/:id', authenticate, async (req, res) => {
                         _id: id.toString()
                     })
                 }))
-                console.log(studentsDetails)
                 res.status(201).json({
                     "success": true,
                     "data": {
@@ -296,7 +298,7 @@ app.get('/class/:id', authenticate, async (req, res) => {
                         teacherId: already_existing_class.teacherId,
                         studentIds: already_existing_class.studentIds,
                         students: studentsDetails
-                    }
+                    },
                 })
             } else {
                 res.status(401).json({
@@ -372,12 +374,12 @@ app.get('/students', authenticateTeacher, async (req, res) => {
             role: "student"
         })
         if (students) {
-            const studentDetails = students.map((item)=>{
+            const studentDetails = students.map((item) => {
                 let _id = item._id;
                 let name = item.name;
                 let email = item.email;
                 let role = item.role;
-                return {_id,name,email,role};
+                return { _id, name, email, role };
             })
             res.status(202).json({
                 success: true,
@@ -387,6 +389,58 @@ app.get('/students', authenticateTeacher, async (req, res) => {
     } catch (error) {
         console.error(error)
         res.json({
+            msg: "Internal server error."
+        })
+    }
+})
+
+app.get('/class/:id/my-attendance', authenticateStudent, async (req, res) => {
+
+    try {
+        const result = validClassId.safeParse(req.params['id']);
+        if (result.success) {
+            const currentClass = await Class.findOne({
+                className: req.params['id']
+            })
+            // console.log(currentClass)
+            // res.status(201).json({
+            //     "success": true,
+            //     "data": currentClass
+            // })
+
+            //@ts-ignore
+            console.log(req.userid);
+            if (currentClass) {
+               const enrolledStudentId = currentClass.studentIds.filter((item:ObjectId)=>{
+                //@ts-ignore
+                return item.toString() === req.userid;
+               })
+               const attendance = await Attendance.find({
+                studentId : enrolledStudentId
+               })
+               res.json({
+                data : attendance
+               })
+               console.log("attendance " , attendance);
+               console.log("current class students ids ", currentClass.studentIds);
+               console.log("enrolledstudent id : ", enrolledStudentId);
+            } else {
+                res.json({
+                    msg: "Class doesn't exist"
+                })
+            }
+        }
+
+        else {
+            console.error(result.error);
+            res.status(401).json({
+                msg: "invalid input"
+            })
+
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(401).json({
             msg: "Internal server error."
         })
     }
