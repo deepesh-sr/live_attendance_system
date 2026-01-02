@@ -7,7 +7,8 @@ import { Attendance, Class, User } from './database/model.js';
 import bcrypt from 'bcrypt'
 import { authenticate, authenticateStudent, authenticateTeacher } from './middleware/authenticate.js';
 import Websocket, { WebSocketServer } from 'ws';
-import { createServer } from 'http';
+import { createServer, IncomingMessage } from 'http';
+import { parse } from 'url';
 
 dotenv.config();
 
@@ -20,11 +21,51 @@ app.use(express.json());
 
 //websocket server
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ noServer: true });
 
-wss.on('connection', function connection(ws) {
+const authenticateWss = (req: IncomingMessage) => {
+    const { token } = parse(req.url || '', true).query;
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!token || !jwtSecret) return null;
+
+    try {
+        if (token && jwtSecret) {
+            const decodedMessage = jwt.verify(token as string, jwtSecret)
+            return decodedMessage;
+        }
+    } catch (error) {
+        return null;
+    }
+}
+
+server.on('upgrade', (req, socket, head) => {
+
+    const authed = authenticateWss(req)
+
+    if (!authed) {
+        // \r\n\r\n: These are control characters used in HTTP to
+        // denote the end of the HTTP headers section.
+        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
+        socket.destroy()
+        return
+    }
+
+    //@ts-ignore
+    req.user = authed;
+
+    wss.handleUpgrade(req, socket, head, connection => {
+        // Manually emit the 'connection' event on a WebSocket 
+        // server (we subscribe to this event below).
+        wss.emit('connection', connection, req)
+    })
+})
+
+wss.on('connection', function connection(ws,req) {
     console.log("Connection established.");
-
+    // @ts-ignore
+    ws.user = req.user;
+    //@ts-ignore
+    console.log("ws user " , ws.user);
     ws.on('message', function messgage(data) {
         const messageText = data.toString();
         console.log('Received', messageText);
@@ -85,52 +126,52 @@ app.get('/health', (req, res) => {
 
 //testing ui for websocket
 app.get('/', (req, res) => {
-    // res.send(`
-    //     <!DOCTYPE html>
-    //     <html>
-    //         <head>
-    //             <title>Express WebSocket Demo</title>
-    //             <style>
-    //                 body { font-family: Arial, sans-serif; margin: 40px; }
-    //                 #messages { border: 1px solid #ccc; height: 300px; 
-    //                            overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
-    //                 #messageInput { width: 300px; padding: 5px; }
-    //                 button { padding: 5px 10px; }
-    //             </style>
-    //         </head>
-    //         <body>
-    //             <h1>Express WebSocket Demo</h1>
-    //             <div id="messages"></div>
-    //             <input type="text" id="messageInput" placeholder="Enter your message">
-    //             <button onclick="sendMessage()">Send Message</button>
-    //             <script>
-    //                 const ws = new WebSocket('ws://localhost:3000');
-    //                 const messages = document.getElementById('messages');
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <title>Express WebSocket Demo</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 40px; }
+                    #messages { border: 1px solid #ccc; height: 300px; 
+                               overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
+                    #messageInput { width: 300px; padding: 5px; }
+                    button { padding: 5px 10px; }
+                </style>
+            </head>
+            <body>
+                <h1>Express WebSocket Demo</h1>
+                <div id="messages"></div>
+                <input type="text" id="messageInput" placeholder="Enter your message">
+                <button onclick="sendMessage()">Send Message</button>
+                <script>
+                    const ws = new WebSocket('ws://localhost:3000');
+                    const messages = document.getElementById('messages');
 
-    //                 ws.onmessage = function(event) {
-    //                     const messageDiv = document.createElement('div');
-    //                     messageDiv.textContent = event.data;
-    //                     messages.appendChild(messageDiv);
-    //                     messages.scrollTop = messages.scrollHeight;
-    //                 };
+                    ws.onmessage = function(event) {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.textContent = event.data;
+                        messages.appendChild(messageDiv);
+                        messages.scrollTop = messages.scrollHeight;
+                    };
 
-    //                 function sendMessage() {
-    //                     const input = document.getElementById('messageInput');
-    //                     if (input.value) {
-    //                         ws.send(input.value);
-    //                         input.value = '';
-    //                     }
-    //                 }
+                    function sendMessage() {
+                        const input = document.getElementById('messageInput');
+                        if (input.value) {
+                            ws.send(input.value);
+                            input.value = '';
+                        }
+                    }
 
-    //                 document.getElementById('messageInput').addEventListener('keypress', function(e) {
-    //                     if (e.key === 'Enter') {
-    //                         sendMessage();
-    //                     }
-    //                 });
-    //             </script>
-    //         </body>
-    //     </html>
-    // `);
+                    document.getElementById('messageInput').addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            sendMessage();
+                        }
+                    });
+                </script>
+            </body>
+        </html>
+    `);
 
 });
 
@@ -177,6 +218,7 @@ app.post('/auth/signup', async (req, res) => {
     }
 })
 
+
 app.post('/auth/login', async (req, res) => {
     const { username, email } = req.body;
     const user = await User.findOne({
@@ -215,6 +257,8 @@ app.get('/auth/me', authenticate, async (req, res) => {
         msg: "auth route accessed"
     })
 })
+
+
 
 app.post('/auth/class', authenticate, async (req, res) => {
     try {
@@ -411,19 +455,19 @@ app.get('/class/:id/my-attendance', authenticateStudent, async (req, res) => {
             //@ts-ignore
             console.log(req.userid);
             if (currentClass) {
-               const enrolledStudentId = currentClass.studentIds.filter((item:ObjectId)=>{
-                //@ts-ignore
-                return item.toString() === req.userid;
-               })
-               const attendance = await Attendance.find({
-                studentId : enrolledStudentId
-               })
-               res.json({
-                data : attendance
-               })
-               console.log("attendance " , attendance);
-               console.log("current class students ids ", currentClass.studentIds);
-               console.log("enrolledstudent id : ", enrolledStudentId);
+                const enrolledStudentId = currentClass.studentIds.filter((item: ObjectId) => {
+                    //@ts-ignore
+                    return item.toString() === req.userid;
+                })
+                const attendance = await Attendance.find({
+                    studentId: enrolledStudentId
+                })
+                res.json({
+                    data: attendance
+                })
+                console.log("attendance ", attendance);
+                console.log("current class students ids ", currentClass.studentIds);
+                console.log("enrolledstudent id : ", enrolledStudentId);
             } else {
                 res.json({
                     msg: "Class doesn't exist"
