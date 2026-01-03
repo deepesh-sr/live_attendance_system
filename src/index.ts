@@ -60,12 +60,12 @@ server.on('upgrade', (req, socket, head) => {
     })
 })
 
-wss.on('connection', function connection(ws,req) {
+wss.on('connection', function connection(ws, req) {
     console.log("Connection established.");
     // @ts-ignore
     ws.user = req.user;
     //@ts-ignore
-    console.log("ws user " , ws.user);
+    console.log("ws user ", ws.user);
     ws.on('message', function messgage(data) {
         const messageText = data.toString();
         console.log('Received', messageText);
@@ -94,18 +94,16 @@ async function connectDB() {
 connectDB();
 
 //zod validation 
-const user = zod.object({
-    username: zod.string(),
-    email: zod.string(),
-    password: zod.string()
-        .min(8)
-        .max(20)
-        .refine((password) => /[A-Z]/.test(password))
-        .refine((password) => /[a-z]/.test(password))
-        .refine((p) => /[0-9]/.test(p))
-        .refine((p) => /[!@#$%^&*]/.test(p)),
+const signupSchema = zod.object({
+    name: zod.string(),
+    email: zod.string().email(),
+    password: zod.string().min(6),
     role: zod.enum(["teacher", "student"])
+})
 
+const loginSchema = zod.object({
+    email: zod.string().email(),
+    password: zod.string()
 })
 
 // class zod validation. 
@@ -177,139 +175,219 @@ app.get('/', (req, res) => {
 
 app.post('/auth/signup', async (req, res) => {
     try {
-        const result = user.safeParse(req.body);
+        const result = signupSchema.safeParse(req.body);
 
-        if (result.success) {
-            const { username, email, password, role } = req.body;
-            const userdata = await User.findOne({
-                username: username,
-                email: email
-            });
-
-            if (userdata) {
-                res.status(403).json({
-                    msg: "Email already exist."
-                })
-            }
-
-            const hashedPassword = await bcrypt.hash(req.body.password, 2);
-
-            const newUser = new User({
-                name: username,
-                email: email,
-                password: hashedPassword,
-                role: role
-            })
-            const saveResult = await newUser.save();
-            if (saveResult) {
-                res.status(200).json({ "msg": "Signed up" })
-            }
-        } else {
+        if (!result.success) {
             console.error(result.error);
-            res.status(411).json({
-                message: "Invalid Inputs"
+            return res.status(400).json({
+                success: false,
+                error: "Invalid request schema"
+            })
+        }
+
+        const { name, email, password, role } = req.body;
+        const userdata = await User.findOne({
+            email: email
+        });
+
+        if (userdata) {
+            return res.status(400).json({
+                success: false,
+                error: "Email already exists"
+            })
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const newUser = new User({
+            name: name,
+            email: email,
+            password: hashedPassword,
+            role: role
+        })
+        const saveResult = await newUser.save();
+        if (saveResult) {
+            res.status(201).json({
+                success: true,
+                data: {
+                    _id: saveResult._id,
+                    name: saveResult.name,
+                    email: saveResult.email,
+                    role: saveResult.role
+                }
             })
         }
     } catch (error) {
         console.error(error);
         res.status(500).json({
-            msg: "server Error"
+            success: false,
+            error: "Internal server error"
         })
     }
 })
 
 
 app.post('/auth/login', async (req, res) => {
-    const { username, email } = req.body;
-    const user = await User.findOne({
-        name: username,
-        email: email
-    })
-    if (user) {
+    try {
+        const result = loginSchema.safeParse(req.body);
+        
+        if (!result.success) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid request schema"
+            })
+        }
+
+        const { email, password } = req.body;
+        const user = await User.findOne({
+            email: email
+        })
+        
+        if (!user) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid email or password"
+            })
+        }
+
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        
+        if (!isPasswordValid) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid email or password"
+            })
+        }
+
         if (process.env.JWT_SECRET) {
             const token = jwt.sign({
-                "userid": user._id,
-                "role": user.role
+                userid: user._id,
+                role: user.role
             }, process.env.JWT_SECRET)
-            res.json({
-                token: token
+            res.status(200).json({
+                success: true,
+                data: {
+                    token: token
+                }
             })
         } else {
             console.error("JWT must be provided");
-        }
-    } else {
-        res.status(401).json({
-            msg: "User do not exist, please signup"
-        })
-    }
-
-})
-
-app.get('/auth/me', authenticate, async (req, res) => {
-    const user = await User.findOne({
-        // @ts-ignore
-        _id: req.userid
-    })
-    res.json({
-        //@ts-ignore
-        userId: req.userid,
-        user: user,
-        msg: "auth route accessed"
-    })
-})
-
-
-
-app.post('/auth/class', authenticate, async (req, res) => {
-    try {
-        const result = validClass.safeParse(req.body);
-        const { className } = req.body;
-        if (result.success) {
-
-            const user = await User.findOne({
-                // @ts-ignore
-                _id: req.userid
+            res.status(500).json({
+                success: false,
+                error: "Internal server error"
             })
-            if (user.role == "teacher") {
-                const already_existing_class = await Class.findOne({
-                    className: className
-                })
-                if (already_existing_class) {
-                    res.status(201).json({
-                        msg: "Class already exists.",
-                        data: already_existing_class
-                    })
-                } else {
-                    const newClass = new Class({
-                        className: className,
-                        teacherId: user._id,
-                        studentId: []
-                    })
-
-                    const saveResult = await newClass.save();
-
-                    //@ts-ignore
-                    req.classId = className
-                    if (saveResult) {
-                        res.status(201).json({
-                            "success": true,
-                            "data": newClass
-                        })
-                    }
-                }
-
-            } else {
-                res.status(401).json({
-                    msg: "Unauthorized User. Must be a teacher."
-                })
-            }
-        } else {
-            console.error(result.error)
         }
     } catch (error) {
         console.error(error);
-        res.status(401).json({
-            msg: "Internal server error."
+        res.status(500).json({
+            success: false,
+            error: "Internal server error"
+        })
+    }
+})
+
+app.get('/auth/me', authenticate, async (req, res) => {
+    try {
+        const user = await User.findOne({
+            // @ts-ignore
+            _id: req.userid
+        })
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found"
+            })
+        }
+        
+        res.status(200).json({
+            success: true,
+            data: {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role
+            }
+        })
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            success: false,
+            error: "Internal server error"
+        })
+    }
+})
+
+
+
+app.post('/class', authenticate, async (req, res) => {
+    try {
+        const result = validClass.safeParse(req.body);
+        
+        if (!result.success) {
+            console.error(result.error)
+            return res.status(400).json({
+                success: false,
+                error: "Invalid request schema"
+            })
+        }
+        
+        const { className } = req.body;
+
+        const user = await User.findOne({
+            // @ts-ignore
+            _id: req.userid
+        })
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found"
+            })
+        }
+        
+        if (user.role !== "teacher") {
+            return res.status(403).json({
+                success: false,
+                error: "Forbidden, teacher access required"
+            })
+        }
+        
+        const already_existing_class = await Class.findOne({
+            className: className
+        })
+        
+        if (already_existing_class) {
+            return res.status(400).json({
+                success: false,
+                error: "Class already exists"
+            })
+        }
+        
+        const newClass = new Class({
+            className: className,
+            teacherId: user._id,
+            studentIds: []
+        })
+
+        const saveResult = await newClass.save();
+
+        if (saveResult) {
+            res.status(201).json({
+                success: true,
+                data: {
+                    _id: saveResult._id,
+                    className: saveResult.className,
+                    teacherId: saveResult.teacherId,
+                    studentIds: saveResult.studentIds
+                }
+            })
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            success: false,
+            error: "Internal server error"
         })
     }
 })
@@ -321,44 +399,66 @@ app.get('/class/:id', authenticate, async (req, res) => {
             // @ts-ignore
             _id: req.userid
         })
-        if (user.role == "teacher") {
-            const already_existing_class = await Class.findOne({
-                className: req.params['id']
-            }).populate('teacherId')
-
-            console.log(already_existing_class);
-            if (already_existing_class) {
-
-                const studentsDetails = await Promise.all(already_existing_class.studentIds.map(async (id: string) => {
-                    await User.findOne({
-                        _id: id.toString()
-                    })
-                }))
-                res.status(201).json({
-                    "success": true,
-                    "data": {
-                        _id: already_existing_class._id,
-                        className: already_existing_class.className,
-                        teacherId: already_existing_class.teacherId,
-                        studentIds: already_existing_class.studentIds,
-                        students: studentsDetails
-                    },
-                })
-            } else {
-                res.status(401).json({
-                    msg: "Class doesnot exist, create one."
-                })
-            }
-
-        } else {
-            res.status(401).json({
-                msg: "Unauthorized User. Must be a teacher."
+        
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found"
             })
         }
+        
+        const already_existing_class = await Class.findOne({
+            className: req.params['id']
+        }).populate('teacherId')
+
+        if (!already_existing_class) {
+            return res.status(404).json({
+                success: false,
+                error: "Class not found"
+            })
+        }
+        
+        // Check if user is teacher who owns class OR student enrolled in class
+        const isTeacher = user.role === "teacher" && already_existing_class.teacherId._id.toString() === user._id.toString();
+        const isEnrolledStudent = user.role === "student" && already_existing_class.studentIds.some((id: any) => id.toString() === user._id.toString());
+        
+        if (!isTeacher && !isEnrolledStudent) {
+            return res.status(403).json({
+                success: false,
+                error: "Forbidden, not class teacher"
+            })
+        }
+
+        const studentsDetails = await Promise.all(already_existing_class.studentIds.map(async (id: any) => {
+            const student = await User.findOne({
+                _id: id.toString()
+            })
+            if (student) {
+                return {
+                    _id: student._id,
+                    name: student.name,
+                    email: student.email
+                }
+            }
+            return null;
+        }))
+        
+        const filteredStudents = studentsDetails.filter(s => s !== null);
+        
+        res.status(200).json({
+            success: true,
+            data: {
+                _id: already_existing_class._id,
+                className: already_existing_class.className,
+                teacherId: already_existing_class.teacherId._id,
+                students: filteredStudents
+            }
+        })
     } catch (error) {
         console.error(error);
-        res.status(401).json({
-            msg: "Internal server error."
+        res.status(500).json({
+            success: false,
+            error: "Internal server error"
         })
     }
 })
@@ -370,45 +470,84 @@ app.get('/auth/teacher', authenticateTeacher, async (req, res) => {
 })
 
 app.post('/class/:id/add-student', authenticateTeacher, async (req, res) => {
+    try {
+        const result = validStudent.safeParse(req.body);
 
-    const result = validStudent.safeParse(req.body);
-    // const result2 = validClass.safeParse(req.params['id']);
+        if (!result.success) {
+            console.error(result.error)
+            return res.status(400).json({
+                success: false,
+                error: "Invalid request schema"
+            })
+        }
 
-    if (result.success) {
         const id = req.params['id'];
         const currentClass = await Class.findOne({
-            //@ts-ignore
             className: id
         })
+        
+        if (!currentClass) {
+            return res.status(404).json({
+                success: false,
+                error: "Class not found"
+            })
+        }
+        
+        // Check if the teacher owns the class
+        //@ts-ignore
+        if (currentClass.teacherId.toString() !== req.userid) {
+            return res.status(403).json({
+                success: false,
+                error: "Forbidden, not class teacher"
+            })
+        }
+        
         const student = await User.findOne({
             _id: req.body.studentId
         })
-        if (student) {
-            if (currentClass) {
-                await currentClass.studentIds.push(student._id);
-                const result = await currentClass.save();
-                if (result) {
-                    res.status(202).json({
-                        msg: 'Student added successfully',
-                        data: currentClass
-                    })
-                } else {
-                    res.status(402).json({
-                        msg: "Add student failed."
-                    })
-                }
-            } else {
-                res.status(404).json({
-                    msg: "Class doesn't exists."
-                })
-            }
-        } else {
-            res.json({
-                msg: "student doesn't exist."
+        
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                error: "Student not found"
             })
         }
-    } else {
-        console.error(result.error)
+        
+        if (student.role !== "student") {
+            return res.status(400).json({
+                success: false,
+                error: "User is not a student"
+            })
+        }
+        
+        // Check if student is already enrolled
+        if (currentClass.studentIds.some((id: any) => id.toString() === student._id.toString())) {
+            return res.status(400).json({
+                success: false,
+                error: "Student already enrolled"
+            })
+        }
+        
+        currentClass.studentIds.push(student._id);
+        const saveResult = await currentClass.save();
+        
+        if (saveResult) {
+            res.status(200).json({
+                success: true,
+                data: {
+                    _id: currentClass._id,
+                    className: currentClass.className,
+                    teacherId: currentClass.teacherId,
+                    studentIds: currentClass.studentIds
+                }
+            })
+        }
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({
+            success: false,
+            error: "Internal server error"
+        })
     }
 })
 
@@ -417,23 +556,24 @@ app.get('/students', authenticateTeacher, async (req, res) => {
         const students = await User.find({
             role: "student"
         })
-        if (students) {
-            const studentDetails = students.map((item) => {
-                let _id = item._id;
-                let name = item.name;
-                let email = item.email;
-                let role = item.role;
-                return { _id, name, email, role };
-            })
-            res.status(202).json({
-                success: true,
-                data: studentDetails
-            })
-        }
+        
+        const studentDetails = students.map((item) => {
+            return { 
+                _id: item._id, 
+                name: item.name, 
+                email: item.email
+            };
+        })
+        
+        res.status(200).json({
+            success: true,
+            data: studentDetails
+        })
     } catch (error) {
         console.error(error)
-        res.json({
-            msg: "Internal server error."
+        res.status(500).json({
+            success: false,
+            error: "Internal server error"
         })
     }
 })
