@@ -7,8 +7,9 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         const token = req.headers['authorization'];
 
         if (!token) {
-            res.status(401).json({
-                msg: "Token must be provided."
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized, token missing or invalid"
             })
         }
         const jwtSecret = process.env.JWT_SECRET;
@@ -23,7 +24,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     } catch (error) {
         console.error(error);
         res.status(401).json({
-            msg : "Invalid or expired token."
+            success: false,
+            error: "Unauthorized, token missing or invalid"
         })
     }
 }
@@ -33,8 +35,9 @@ export const authenticateTeacher = async (req: Request, res: Response, next: Nex
         const token = req.headers['authorization'];
 
         if (!token) {
-            res.status(401).json({
-                msg: "Token must be provided."
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized, token missing or invalid"
             })
         }
         const jwtSecret = process.env.JWT_SECRET;
@@ -44,12 +47,15 @@ export const authenticateTeacher = async (req: Request, res: Response, next: Nex
             //   @ts-ignore
             req.role = decodedMessage.role;
             //@ts-ignore
+            req.userid = decodedMessage.userid;
+            //@ts-ignore
             if ( req.role == 'teacher'){
                 next();
             }
             else { 
-                res.status(401).json({
-                    msg : "Authorization Error. Must be a teacher."
+                res.status(403).json({
+                    success: false,
+                    error: "Forbidden, teacher access required"
                 })
             }
         }
@@ -57,7 +63,8 @@ export const authenticateTeacher = async (req: Request, res: Response, next: Nex
     } catch (error) {
         console.error(error);
         res.status(401).json({
-            msg : "Invalid or expired token."
+            success: false,
+            error: "Unauthorized, token missing or invalid"
         })
     }
 }
@@ -68,8 +75,9 @@ export const authenticateStudent = async (req: Request, res: Response, next: Nex
         const token = req.headers['authorization'];
 
         if (!token) {
-            res.status(401).json({
-                msg: "Token must be provided."
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized, token missing or invalid"
             })
         }
         const jwtSecret = process.env.JWT_SECRET;
@@ -87,8 +95,9 @@ export const authenticateStudent = async (req: Request, res: Response, next: Nex
                 next();
             }
             else { 
-                res.status(401).json({
-                    msg : "Authorization Error. Must be a student."
+                res.status(403).json({
+                    success: false,
+                    error: "Forbidden, student access required"
                 })
             }
         }
@@ -96,7 +105,8 @@ export const authenticateStudent = async (req: Request, res: Response, next: Nex
     } catch (error) {
         console.error(error);
         res.status(401).json({
-            msg : "Invalid or expired token."
+            success: false,
+            error: "Unauthorized, token missing or invalid"
         })
     }
 }
