@@ -2,14 +2,13 @@ import express from 'express'
 import jwt from 'jsonwebtoken'
 import dotenv from 'dotenv'
 import mongoose, { type ObjectId } from 'mongoose';
-import * as zod from 'zod'
 import { Attendance, Class, User } from './database/model.js';
 import bcrypt from 'bcrypt'
 import { authenticate, authenticateStudent, authenticateTeacher } from './middleware/authenticate.js';
 import Websocket, { WebSocketServer } from 'ws';
 import { createServer, IncomingMessage } from 'http';
 import { parse } from 'url';
-import { validAttendance,signupSchema,loginSchema,validClass,validClassId,validStudent } from './utils/zod.js';
+import { validAttendance, signupSchema, loginSchema, validClass, validClassId, validStudent } from './utils/zod.js';
 
 dotenv.config();
 
@@ -98,7 +97,7 @@ wss.on('connection', function connection(ws, req) {
                 error: "Invalid msg schema"
             }))
         }
-
+        // ----------------- Attendanceh marked --------------
         if (parsedMsg.event === 'ATTENDANCE_MARKED') {
             //@ts-ignore    
             if (ws.user.role !== "teacher") {
@@ -107,26 +106,52 @@ wss.on('connection', function connection(ws, req) {
                     error: "User must be teacher."
                 }))
             }
-        }
 
-        if (activeSession.classId !== '') {
+
+            if (activeSession.classId !== '') {
+                //@ts-ignore
+                activeSession.attendance[parsedMsg.data.studentId] = parsedMsg.data.status;
+                console.log(activeSession);
+                ws.send(JSON.stringify({
+                    success: true,
+                    data: {
+                        "studentId": parsedMsg.data.studentId,
+                        "status": parsedMsg.data.status
+                    }
+                }))
+            }
+            else {
+                ws.send(JSON.stringify({
+                    success: false,
+                    error: "No active session"
+                }))
+
+            }
+        }
+        // evnet : Today summary 
+        if (parsedMsg.event === 'TODAY_SUMMARY') {
+
+            //@ts-ignore    
+            if (ws.user.role !== "teacher") {
+                ws.send(JSON.stringify({
+                    success: false,
+                    error: "User must be teacher."
+                }))
+            }
             //@ts-ignore
-            activeSession.attendance[parsedMsg.data.studentId] = parsedMsg.data.status;
-            console.log(activeSession);
-             ws.send(JSON.stringify({
+            const present = Object.keys(activeSession.attendance).filter(key => activeSession.attendance[key] === 'present');
+            //@ts-ignore
+            const absent = Object.keys(activeSession.attendance).filter(key => activeSession.attendance[key] === 'absent');
+
+            ws.send(JSON.stringify({
                 success: true,
-                data : {
-                    "studentId" : parsedMsg.data.studentId,
-                    "status" : parsedMsg.data.status
+                event: "TODAY_SUMMARY",
+                data: {
+                    "present": present.length,
+                    "absent": absent.length,
+                    "total": present.length + absent.length
                 }
             }))
-        }
-        else {
-            ws.send(JSON.stringify({
-                success: false,
-                error: "No active session"
-            }))
-
         }
 
     })
