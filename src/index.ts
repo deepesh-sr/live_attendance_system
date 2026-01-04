@@ -59,6 +59,21 @@ server.on('upgrade', (req, socket, head) => {
         wss.emit('connection', connection, req)
     })
 })
+interface User{
+    socket : Websocket,
+    data : {
+        event : string,
+        data : {}
+    }
+}
+
+let activeSession = {
+  classId: "", // current active class
+  startedAt: "", // ISO string
+  attendance: {
+    // studentId: status
+  }
+};
 
 wss.on('connection', function connection(ws, req) {
     console.log("Connection established.");
@@ -66,10 +81,15 @@ wss.on('connection', function connection(ws, req) {
     ws.user = req.user;
     //@ts-ignore
     console.log("ws user ", ws.user);
-    ws.on('message', function messgage(data) {
-        const messageText = data.toString();
-        console.log('Received', messageText);
-        ws.send(`Echo : ${messageText}`);
+
+    ws.on('message', message => {
+
+        let parsedMsg = JSON.parse(message as unknown as string); 
+
+        if ( parsedMsg.event === 'ATTENDANCE_MARKED'){
+
+        }
+
     })
 
     ws.on('close', function close() {
@@ -111,7 +131,9 @@ const validClass = zod.object({
     className: zod.string()
 })
 
-const validClassId = zod.string();
+const validClassId = zod.object({
+    classId : zod.string()
+})
 
 // student validation
 const validStudent = zod.object({
@@ -320,7 +342,7 @@ app.get('/auth/me', authenticate, async (req, res) => {
 
 
 
-app.post('/class', authenticate, async (req, res) => {
+app.post('/class', authenticateTeacher, async (req, res) => {
     try {
         const result = validClass.safeParse(req.body);
         
@@ -333,6 +355,8 @@ app.post('/class', authenticate, async (req, res) => {
         }
         
         const { className } = req.body;
+        //@ts-ignore
+        console.log(req.userid)
 
         const user = await User.findOne({
             // @ts-ignore
@@ -393,7 +417,7 @@ app.post('/class', authenticate, async (req, res) => {
 })
 
 // get class by classid
-app.get('/class/:id', authenticate, async (req, res) => {
+app.get('/class/:id', authenticateTeacher, async (req, res) => {
     try {
         const user = await User.findOne({
             // @ts-ignore
@@ -629,6 +653,43 @@ app.get('/class/:id/my-attendance', authenticateStudent, async (req, res) => {
         })
     }
 })
+
+
+app.post('/attendance/start', authenticateTeacher, (req,res)=>{
+
+    try {
+        
+    const result = validClassId.safeParse(req.body);
+
+    if (!result.success) { 
+        res.status(400).json({
+            "success" : false,
+            "error" : "Invalid request schema"
+        })
+    }
+
+    const date = new Date();
+
+    activeSession.classId = req.body.classId;
+    activeSession.startedAt = date.toISOString();
+
+    res.status(200).json({
+        "success" : true,
+        "data" : activeSession
+    })
+
+    } catch (error) {
+        console.error(error);
+        res.json({
+            "success" : false, 
+            "data" : "internal server error",
+            "error" : error
+        })
+    }
+})
+
+
 server.listen(3000, () => {
     console.log("App is listening of port 3000")
 })
+
