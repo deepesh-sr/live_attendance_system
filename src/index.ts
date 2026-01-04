@@ -9,6 +9,7 @@ import { authenticate, authenticateStudent, authenticateTeacher } from './middle
 import Websocket, { WebSocketServer } from 'ws';
 import { createServer, IncomingMessage } from 'http';
 import { parse } from 'url';
+import { validAttendance,signupSchema,loginSchema,validClass,validClassId,validStudent } from './utils/zod.js';
 
 dotenv.config();
 
@@ -59,21 +60,23 @@ server.on('upgrade', (req, socket, head) => {
         wss.emit('connection', connection, req)
     })
 })
-interface User{
-    socket : Websocket,
-    data : {
-        event : string,
-        data : {}
+interface User {
+    socket: Websocket,
+    data: {
+        event: string,
+        data: {}
     }
 }
 
 let activeSession = {
-  classId: "", // current active class
-  startedAt: "", // ISO string
-  attendance: {
-    // studentId: status
-  }
+    classId: "", // current active class
+    startedAt: "", // ISO string
+    attendance: {
+        // studentId: status
+    }
 };
+
+
 
 wss.on('connection', function connection(ws, req) {
     console.log("Connection established.");
@@ -84,9 +87,45 @@ wss.on('connection', function connection(ws, req) {
 
     ws.on('message', message => {
 
-        let parsedMsg = JSON.parse(message as unknown as string); 
+        let parsedMsg = JSON.parse(message as unknown as string);
 
-        if ( parsedMsg.event === 'ATTENDANCE_MARKED'){
+        const result = validAttendance.safeParse(parsedMsg);
+
+        if (!result.success) {
+            console.error('Invalid message schema', result.error)
+            ws.send(JSON.stringify({
+                success: false,
+                error: "Invalid msg schema"
+            }))
+        }
+
+        if (parsedMsg.event === 'ATTENDANCE_MARKED') {
+            //@ts-ignore    
+            if (ws.user.role !== "teacher") {
+                ws.send(JSON.stringify({
+                    success: false,
+                    error: "User must be teacher."
+                }))
+            }
+        }
+
+        if (activeSession.classId !== '') {
+            //@ts-ignore
+            activeSession.attendance[parsedMsg.data.studentId] = parsedMsg.data.status;
+            console.log(activeSession);
+             ws.send(JSON.stringify({
+                success: true,
+                data : {
+                    "studentId" : parsedMsg.data.studentId,
+                    "status" : parsedMsg.data.status
+                }
+            }))
+        }
+        else {
+            ws.send(JSON.stringify({
+                success: false,
+                error: "No active session"
+            }))
 
         }
 
@@ -113,32 +152,7 @@ async function connectDB() {
 }
 connectDB();
 
-//zod validation 
-const signupSchema = zod.object({
-    name: zod.string(),
-    email: zod.string().email(),
-    password: zod.string().min(6),
-    role: zod.enum(["teacher", "student"])
-})
 
-const loginSchema = zod.object({
-    email: zod.string().email(),
-    password: zod.string()
-})
-
-// class zod validation. 
-const validClass = zod.object({
-    className: zod.string()
-})
-
-const validClassId = zod.object({
-    classId : zod.string()
-})
-
-// student validation
-const validStudent = zod.object({
-    studentId: zod.string()
-})
 
 app.get('/health', (req, res) => {
     res.send("Helloooooo")
@@ -252,7 +266,7 @@ app.post('/auth/signup', async (req, res) => {
 app.post('/auth/login', async (req, res) => {
     try {
         const result = loginSchema.safeParse(req.body);
-        
+
         if (!result.success) {
             return res.status(400).json({
                 success: false,
@@ -264,7 +278,7 @@ app.post('/auth/login', async (req, res) => {
         const user = await User.findOne({
             email: email
         })
-        
+
         if (!user) {
             return res.status(400).json({
                 success: false,
@@ -273,7 +287,7 @@ app.post('/auth/login', async (req, res) => {
         }
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
-        
+
         if (!isPasswordValid) {
             return res.status(400).json({
                 success: false,
@@ -314,14 +328,14 @@ app.get('/auth/me', authenticate, async (req, res) => {
             // @ts-ignore
             _id: req.userid
         })
-        
+
         if (!user) {
             return res.status(404).json({
                 success: false,
                 error: "User not found"
             })
         }
-        
+
         res.status(200).json({
             success: true,
             data: {
@@ -345,7 +359,7 @@ app.get('/auth/me', authenticate, async (req, res) => {
 app.post('/class', authenticateTeacher, async (req, res) => {
     try {
         const result = validClass.safeParse(req.body);
-        
+
         if (!result.success) {
             console.error(result.error)
             return res.status(400).json({
@@ -353,7 +367,7 @@ app.post('/class', authenticateTeacher, async (req, res) => {
                 error: "Invalid request schema"
             })
         }
-        
+
         const { className } = req.body;
         //@ts-ignore
         console.log(req.userid)
@@ -362,32 +376,32 @@ app.post('/class', authenticateTeacher, async (req, res) => {
             // @ts-ignore
             _id: req.userid
         })
-        
+
         if (!user) {
             return res.status(404).json({
                 success: false,
                 error: "User not found"
             })
         }
-        
+
         if (user.role !== "teacher") {
             return res.status(403).json({
                 success: false,
                 error: "Forbidden, teacher access required"
             })
         }
-        
+
         const already_existing_class = await Class.findOne({
             className: className
         })
-        
+
         if (already_existing_class) {
             return res.status(400).json({
                 success: false,
                 error: "Class already exists"
             })
         }
-        
+
         const newClass = new Class({
             className: className,
             teacherId: user._id,
@@ -423,14 +437,14 @@ app.get('/class/:id', authenticateTeacher, async (req, res) => {
             // @ts-ignore
             _id: req.userid
         })
-        
+
         if (!user) {
             return res.status(404).json({
                 success: false,
                 error: "User not found"
             })
         }
-        
+
         const already_existing_class = await Class.findOne({
             className: req.params['id']
         }).populate('teacherId')
@@ -441,11 +455,11 @@ app.get('/class/:id', authenticateTeacher, async (req, res) => {
                 error: "Class not found"
             })
         }
-        
+
         // Check if user is teacher who owns class OR student enrolled in class
         const isTeacher = user.role === "teacher" && already_existing_class.teacherId._id.toString() === user._id.toString();
         const isEnrolledStudent = user.role === "student" && already_existing_class.studentIds.some((id: any) => id.toString() === user._id.toString());
-        
+
         if (!isTeacher && !isEnrolledStudent) {
             return res.status(403).json({
                 success: false,
@@ -466,9 +480,9 @@ app.get('/class/:id', authenticateTeacher, async (req, res) => {
             }
             return null;
         }))
-        
+
         const filteredStudents = studentsDetails.filter(s => s !== null);
-        
+
         res.status(200).json({
             success: true,
             data: {
@@ -509,14 +523,14 @@ app.post('/class/:id/add-student', authenticateTeacher, async (req, res) => {
         const currentClass = await Class.findOne({
             className: id
         })
-        
+
         if (!currentClass) {
             return res.status(404).json({
                 success: false,
                 error: "Class not found"
             })
         }
-        
+
         // Check if the teacher owns the class
         //@ts-ignore
         if (currentClass.teacherId.toString() !== req.userid) {
@@ -525,25 +539,25 @@ app.post('/class/:id/add-student', authenticateTeacher, async (req, res) => {
                 error: "Forbidden, not class teacher"
             })
         }
-        
+
         const student = await User.findOne({
             _id: req.body.studentId
         })
-        
+
         if (!student) {
             return res.status(404).json({
                 success: false,
                 error: "Student not found"
             })
         }
-        
+
         if (student.role !== "student") {
             return res.status(400).json({
                 success: false,
                 error: "User is not a student"
             })
         }
-        
+
         // Check if student is already enrolled
         if (currentClass.studentIds.some((id: any) => id.toString() === student._id.toString())) {
             return res.status(400).json({
@@ -551,10 +565,10 @@ app.post('/class/:id/add-student', authenticateTeacher, async (req, res) => {
                 error: "Student already enrolled"
             })
         }
-        
+
         currentClass.studentIds.push(student._id);
         const saveResult = await currentClass.save();
-        
+
         if (saveResult) {
             res.status(200).json({
                 success: true,
@@ -580,15 +594,15 @@ app.get('/students', authenticateTeacher, async (req, res) => {
         const students = await User.find({
             role: "student"
         })
-        
+
         const studentDetails = students.map((item) => {
-            return { 
-                _id: item._id, 
-                name: item.name, 
+            return {
+                _id: item._id,
+                name: item.name,
                 email: item.email
             };
         })
-        
+
         res.status(200).json({
             success: true,
             data: studentDetails
@@ -655,35 +669,35 @@ app.get('/class/:id/my-attendance', authenticateStudent, async (req, res) => {
 })
 
 
-app.post('/attendance/start', authenticateTeacher, (req,res)=>{
+app.post('/attendance/start', authenticateTeacher, (req, res) => {
 
     try {
-        
-    const result = validClassId.safeParse(req.body);
 
-    if (!result.success) { 
-        res.status(400).json({
-            "success" : false,
-            "error" : "Invalid request schema"
+        const result = validClassId.safeParse(req.body);
+
+        if (!result.success) {
+            res.status(400).json({
+                "success": false,
+                "error": "Invalid request schema"
+            })
+        }
+
+        const date = new Date();
+
+        activeSession.classId = req.body.classId;
+        activeSession.startedAt = date.toISOString();
+
+        res.status(200).json({
+            "success": true,
+            "data": activeSession
         })
-    }
-
-    const date = new Date();
-
-    activeSession.classId = req.body.classId;
-    activeSession.startedAt = date.toISOString();
-
-    res.status(200).json({
-        "success" : true,
-        "data" : activeSession
-    })
 
     } catch (error) {
         console.error(error);
         res.json({
-            "success" : false, 
-            "data" : "internal server error",
-            "error" : error
+            "success": false,
+            "data": "internal server error",
+            "error": error
         })
     }
 })
