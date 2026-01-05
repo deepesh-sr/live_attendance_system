@@ -102,8 +102,10 @@ wss.on('connection', function connection(ws, req) {
             //@ts-ignore    
             if (ws.user.role !== "teacher") {
                 ws.send(JSON.stringify({
-                    success: false,
-                    error: "User must be teacher."
+                    "event": "ERROR",
+                    "data": {
+                        "message": "Forbidden, teacher event only"
+                    }
                 }))
             }
 
@@ -134,8 +136,10 @@ wss.on('connection', function connection(ws, req) {
             //@ts-ignore    
             if (ws.user.role !== "teacher") {
                 ws.send(JSON.stringify({
-                    success: false,
-                    error: "User must be teacher."
+                    "event": "ERROR",
+                    "data": {
+                        "message": "Forbidden, teacher event only"
+                    }
                 }))
             }
             //@ts-ignore
@@ -152,6 +156,18 @@ wss.on('connection', function connection(ws, req) {
                     "total": present.length + absent.length
                 }
             }))
+        }
+
+        if (parsedMsg.event === 'MY_ATTENDANCE') {
+            //@ts-ignore
+            if (ws.user.role == 'student') {
+            
+            // @ts-ignore
+            const result =  Object.keys(activeSession.attendance).filter(key => activeSession.attendance[key] === activeSession.attendance[ws.user.userid]);
+            if(!result){
+            
+            }
+            }
         }
 
     })
