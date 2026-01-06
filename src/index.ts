@@ -171,10 +171,33 @@ wss.on('connection', function connection(ws, req) {
                 console.log("User : ", ws.user);
                 console.log("result", result);
                 if (result.length > 0) {
-                    
+                    wss.clients.forEach((client) => {
+                        if (client == ws) {
+                            ws.send(JSON.stringify({
+                                "event": "MY_ATTENDANCE",
+                                "data": {
+                                    // @ts-ignore
+                                    "status": activeSession.attendance[ws.user.userid]
+                                }
+                            }))
+                        }
+                    })
+                }else{
+                     wss.clients.forEach((client) => {
+                        if (client == ws) {
+                            ws.send(JSON.stringify({
+                                "event": "MY_ATTENDANCE",
+                                "data": {
+                                    // @ts-ignore
+                                    "status": "not yet updated"
+                                }
+                            }))
+                        }
+                    })
                 }
             }
         }
+
 
     })
 
