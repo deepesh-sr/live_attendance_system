@@ -84,7 +84,7 @@ wss.on('connection', function connection(ws, req) {
     //@ts-ignore
     console.log("ws user ", ws.user);
 
-    ws.on('message', message => {
+    ws.on('message', async message => {
 
         let parsedMsg = JSON.parse(message as unknown as string);
 
@@ -182,8 +182,8 @@ wss.on('connection', function connection(ws, req) {
                             }))
                         }
                     })
-                }else{
-                     wss.clients.forEach((client) => {
+                } else {
+                    wss.clients.forEach((client) => {
                         if (client == ws) {
                             ws.send(JSON.stringify({
                                 "event": "MY_ATTENDANCE",
@@ -198,7 +198,22 @@ wss.on('connection', function connection(ws, req) {
             }
         }
 
+        if (parsedMsg.event === "DONE") {
+            //@ts-ignore    
+            if (ws.user.role !== "teacher") {
+                ws.send(JSON.stringify({
+                    "event": "ERROR",
+                    "data": {
+                        "message": "Forbidden, teacher event only"
+                    }
+                }))
+            }
+            const currentClass = await Class.findOne({
+                className: activeSession.classId
+            })
+            console.log(currentClass)
 
+        }
     })
 
     ws.on('close', function close() {
