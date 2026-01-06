@@ -161,12 +161,18 @@ wss.on('connection', function connection(ws, req) {
         if (parsedMsg.event === 'MY_ATTENDANCE') {
             //@ts-ignore
             if (ws.user.role == 'student') {
-            
-            // @ts-ignore
-            const result =  Object.keys(activeSession.attendance).filter(key => activeSession.attendance[key] === activeSession.attendance[ws.user.userid]);
-            if(!result){
-            
-            }
+
+                // @ts-ignore
+                const result = Object.keys(activeSession.attendance).filter(key => {
+                    // @ts-ignore
+                    return key === ws.user.userid
+                });
+                // @ts-ignore
+                console.log("User : ", ws.user);
+                console.log("result", result);
+                if (result.length > 0) {
+                    
+                }
             }
         }
 
