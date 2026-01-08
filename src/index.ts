@@ -168,8 +168,8 @@ wss.on('connection', function connection(ws, req) {
                     return key === ws.user.userid
                 });
                 // @ts-ignore
-                console.log("User : ", ws.user);
-                console.log("result", result);
+                // console.log("User : ", ws.user);
+                // console.log("result", result);
                 if (result.length > 0) {
                     wss.clients.forEach((client) => {
                         if (client == ws) {
